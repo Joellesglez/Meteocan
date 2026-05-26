@@ -269,9 +269,25 @@ function Index() {
                 </tbody>
               </table>
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Para horarios exactos de marea alta/baja consulta el aviso oficial de <a className="underline hover:text-primary" target="_blank" rel="noopener noreferrer" href="https://www.puertos.es/es-es/oceanografia/Paginas/portus.aspx">Puertos del Estado · PORTUS</a>.
+          </div>
+        )}
+
+        {/* Mareas (pleamar / bajamar) */}
+        {selected.coastal && (
+          <div className="mt-5 rounded-3xl bg-card shadow-card p-6">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <Moon className="w-5 h-5 text-primary" /> Mareas — pleamar y bajamar
+              </h3>
+              <span className="text-xs text-muted-foreground">Próximas 72 h</span>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Estimación armónica (M2 + S2) ajustada por longitud. Para horarios oficiales consulta{" "}
+              <a className="underline hover:text-primary" target="_blank" rel="noopener noreferrer" href="https://www.puertos.es/es-es/oceanografia/Paginas/portus.aspx">
+                Puertos del Estado · PORTUS
+              </a>.
             </p>
+            <TideChart lat={selected.lat} lon={selected.lon} />
           </div>
         )}
 
