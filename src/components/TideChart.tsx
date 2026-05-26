@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { computeTideSeries, type TideExtremum } from "@/lib/tides";
 
 type Props = { lat: number; lon: number };
@@ -6,6 +6,17 @@ type Props = { lat: number; lon: number };
 const HOURS = 72; // 3 días
 
 export function TideChart({ lat, lon }: Props) {
+  // Avoid SSR/CSR mismatch: only render after mount (tides depend on current time).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) {
+    return <div className="w-full h-56 rounded-2xl bg-secondary/40 animate-pulse" />;
+  }
+  return <TideChartInner lat={lat} lon={lon} />;
+}
+
+function TideChartInner({ lat, lon }: Props) {
+
   const { series, extrema, dayMarks, range } = useMemo(() => {
     const start = new Date();
     start.setMinutes(0, 0, 0);
