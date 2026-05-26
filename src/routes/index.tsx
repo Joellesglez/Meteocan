@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getForecast } from "@/lib/weather.functions";
+import { getForecast, getMarine } from "@/lib/weather.functions";
 import { LOCATIONS, type Location } from "@/lib/locations";
-import { Search, MapPin, Wind, Droplets, Cloud, Sun, CloudRain, CloudSnow, CloudLightning, Video, ExternalLink } from "lucide-react";
+import { Search, MapPin, Wind, Droplets, Cloud, Sun, CloudRain, CloudSnow, CloudLightning, Video, ExternalLink, Waves, Thermometer, Compass, Timer } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -12,7 +12,6 @@ export const Route = createFileRoute("/")({
 
 const ISLANDS = ["Todas", "Tenerife", "Gran Canaria", "Lanzarote", "Fuerteventura", "La Palma", "La Gomera", "El Hierro", "La Graciosa"];
 
-// meteoblue pictocode → icon + label (simplified)
 function pictoToIcon(code: number) {
   if (!code) return { Icon: Sun, label: "Despejado" };
   if (code <= 2) return { Icon: Sun, label: "Soleado" };
@@ -25,6 +24,11 @@ function pictoToIcon(code: number) {
 }
 
 const DAYS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+function degToCardinal(deg: number) {
+  const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO"];
+  return dirs[Math.round(deg / 22.5) % 16];
+}
 
 function Index() {
   const [query, setQuery] = useState("");
@@ -41,17 +45,26 @@ function Index() {
   }, [query, island]);
 
   const fetchForecast = useServerFn(getForecast);
+  const fetchMarine = useServerFn(getMarine);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["forecast", selected.lat, selected.lon],
     queryFn: () => fetchForecast({ data: { lat: selected.lat, lon: selected.lon } }),
     staleTime: 1000 * 60 * 15,
   });
 
+  const { data: marine } = useQuery({
+    queryKey: ["marine", selected.lat, selected.lon, selected.coastal],
+    queryFn: () => fetchMarine({ data: { lat: selected.lat, lon: selected.lon } }),
+    staleTime: 1000 * 60 * 30,
+    enabled: !!selected.coastal,
+  });
+
   const days = data?.data_day;
+  const marineDays = marine?.available ? marine.daily : null;
 
   return (
     <main className="min-h-screen">
-      {/* Hero */}
       <header className="relative overflow-hidden">
         <div className="absolute inset-0 gradient-sky opacity-90" />
         <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-12 text-primary-foreground">
@@ -63,13 +76,12 @@ function Index() {
             <span className="text-accent">ocho islas afortunadas</span>
           </h1>
           <p className="mt-4 max-w-xl text-lg opacity-90">
-            Pronóstico de 7 días, isla por isla, municipio por municipio. Con webcams en directo de los rincones más bonitos del archipiélago.
+            Pronóstico de 7 días, isla por isla, municipio por municipio. Mar, oleaje y webcams en directo.
           </p>
         </div>
       </header>
 
       <section className="max-w-6xl mx-auto px-6 -mt-8 relative z-10">
-        {/* Search bar */}
         <div className="glass shadow-soft rounded-2xl p-4 flex flex-col md:flex-row gap-3">
           <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl bg-background border border-border">
             <Search className="w-4 h-4 text-muted-foreground" />
@@ -98,9 +110,8 @@ function Index() {
           </div>
         </div>
 
-        {/* Results list */}
         {(query || island !== "Todas") && (
-          <div className="mt-4 glass rounded-2xl p-2 max-h-64 overflow-y-auto shadow-card">
+          <div className="mt-4 glass rounded-2xl p-2 max-h-72 overflow-y-auto shadow-card">
             {filtered.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">Sin resultados.</p>
             ) : (
@@ -117,18 +128,23 @@ function Index() {
                     <span className="font-medium">{l.name}</span>
                     <span className="ml-2 text-xs text-muted-foreground">{l.island}</span>
                   </span>
-                  {l.webcam && <Video className="w-4 h-4 text-accent" />}
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    {l.coastal && <Waves className="w-4 h-4 text-primary/60" />}
+                    {l.webcam && <Video className="w-4 h-4 text-accent" />}
+                  </span>
                 </button>
               ))
             )}
           </div>
         )}
+
+        <p className="mt-2 text-xs text-muted-foreground px-1">
+          {LOCATIONS.filter((l) => l.type === "municipality").length} municipios y zonas · {LOCATIONS.filter((l) => l.webcam).length} webcams en directo
+        </p>
       </section>
 
-      {/* Current + forecast */}
       <section className="max-w-6xl mx-auto px-6 mt-10 pb-20">
         <div className="grid lg:grid-cols-3 gap-5">
-          {/* Today big card */}
           <div className="lg:col-span-2 rounded-3xl gradient-ocean text-primary-foreground p-8 shadow-card relative overflow-hidden">
             <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-accent/30 blur-3xl" />
             <div className="relative">
@@ -149,14 +165,13 @@ function Index() {
                     <Stat icon={Wind} label="Viento" value={`${Math.round(days.windspeed_mean?.[0] ?? 0)} m/s`} />
                     <Stat icon={Droplets} label="Lluvia" value={`${days.precipitation[0].toFixed(1)} mm`} />
                     <Stat icon={Cloud} label="Nubes" value={`${Math.round(days.totalcloudcover_mean?.[0] ?? 0)}%`} />
-                    <Stat icon={Sun} label="UV / fiab." value={`${days.predictability[0]}%`} />
+                    <Stat icon={Sun} label="Fiabilidad" value={`${days.predictability[0]}%`} />
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Webcam */}
           <div className="rounded-3xl bg-card shadow-card p-6 flex flex-col">
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Video className="w-4 h-4 text-accent" /> Webcam en directo
@@ -181,13 +196,84 @@ function Index() {
               </div>
             ) : (
               <p className="mt-4 text-sm text-muted-foreground flex-1">
-                Aún no tenemos una webcam pública para esta ubicación. Prueba con Candelaria, Maspalomas, Corralejo, Arrecife o Puerto de la Cruz, entre otros.
+                Aún no tenemos una webcam pública para esta ubicación. Prueba con Candelaria, Maspalomas, Corralejo, Arrecife, Sta. Cruz de La Palma o Puerto de la Cruz.
               </p>
             )}
           </div>
         </div>
 
-        {/* 7-day forecast */}
+        {/* Mar y oleaje */}
+        {selected.coastal && marineDays && (
+          <div className="mt-5 rounded-3xl bg-card shadow-card p-6">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <Waves className="w-5 h-5 text-primary" /> Mar y oleaje
+              </h3>
+              <span className="text-xs text-muted-foreground">Próximos 7 días · Atlántico</span>
+            </div>
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <SeaStat
+                icon={Thermometer}
+                label="Temp. del mar hoy"
+                value={`${marineDays.sea_surface_temperature_max[0].toFixed(1)}°C`}
+                hint={`Mín ${marineDays.sea_surface_temperature_min[0].toFixed(1)}°C`}
+              />
+              <SeaStat
+                icon={Waves}
+                label="Altura ola máx."
+                value={`${marineDays.wave_height_max[0].toFixed(2)} m`}
+                hint={waveLabel(marineDays.wave_height_max[0])}
+              />
+              <SeaStat
+                icon={Timer}
+                label="Periodo"
+                value={`${marineDays.wave_period_max[0].toFixed(1)} s`}
+                hint="Entre crestas"
+              />
+              <SeaStat
+                icon={Compass}
+                label="Dirección"
+                value={degToCardinal(marineDays.wave_direction_dominant[0])}
+                hint={`${Math.round(marineDays.wave_direction_dominant[0])}°`}
+              />
+            </div>
+
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full text-sm min-w-[520px]">
+                <thead>
+                  <tr className="text-xs uppercase tracking-wider text-muted-foreground">
+                    <th className="text-left font-medium py-2">Día</th>
+                    <th className="text-right font-medium">Mar (°C)</th>
+                    <th className="text-right font-medium">Ola máx.</th>
+                    <th className="text-right font-medium">Periodo</th>
+                    <th className="text-right font-medium">Dir.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {marineDays.time.map((t: string, i: number) => {
+                    const d = new Date(t);
+                    return (
+                      <tr key={t} className="border-t border-border/60">
+                        <td className="py-2">
+                          {i === 0 ? "Hoy" : DAYS[d.getDay()]}{" "}
+                          <span className="text-muted-foreground text-xs">{d.getDate()}/{d.getMonth() + 1}</span>
+                        </td>
+                        <td className="text-right">{marineDays.sea_surface_temperature_max[i].toFixed(1)}°</td>
+                        <td className="text-right">{marineDays.wave_height_max[i].toFixed(2)} m</td>
+                        <td className="text-right">{marineDays.wave_period_max[i].toFixed(1)} s</td>
+                        <td className="text-right">{degToCardinal(marineDays.wave_direction_dominant[i])}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Para horarios exactos de marea alta/baja consulta el aviso oficial de <a className="underline hover:text-primary" target="_blank" rel="noopener noreferrer" href="https://www.puertos.es/es-es/oceanografia/Paginas/portus.aspx">Puertos del Estado · PORTUS</a>.
+            </p>
+          </div>
+        )}
+
         <h3 className="mt-12 mb-4 text-2xl font-bold">Próximos 7 días</h3>
         {days ? (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -222,11 +308,19 @@ function Index() {
         )}
 
         <footer className="mt-16 text-center text-xs text-muted-foreground">
-          Datos meteorológicos por <a className="underline hover:text-primary" href="https://www.meteoblue.com" target="_blank" rel="noopener noreferrer">meteoblue</a> · Webcams cortesía de sus proveedores.
+          Datos meteorológicos por <a className="underline hover:text-primary" href="https://www.meteoblue.com" target="_blank" rel="noopener noreferrer">meteoblue</a> · Mar y oleaje por <a className="underline hover:text-primary" href="https://open-meteo.com" target="_blank" rel="noopener noreferrer">Open-Meteo Marine</a> · Webcams cortesía de sus proveedores.
         </footer>
       </section>
     </main>
   );
+}
+
+function waveLabel(h: number) {
+  if (h < 0.5) return "Mar rizada";
+  if (h < 1.25) return "Marejadilla";
+  if (h < 2.5) return "Marejada";
+  if (h < 4) return "Fuerte marejada";
+  return "Mar gruesa";
 }
 
 function Stat({ icon: Icon, label, value }: { icon: typeof Wind; label: string; value: string }) {
@@ -237,6 +331,18 @@ function Stat({ icon: Icon, label, value }: { icon: typeof Wind; label: string; 
         <span className="opacity-70">{label}: </span>
         <span className="font-semibold">{value}</span>
       </span>
+    </div>
+  );
+}
+
+function SeaStat({ icon: Icon, label, value, hint }: { icon: typeof Waves; label: string; value: string; hint: string }) {
+  return (
+    <div className="rounded-2xl bg-secondary/60 p-4">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wider">
+        <Icon className="w-4 h-4" /> {label}
+      </div>
+      <p className="mt-1.5 text-2xl font-bold">{value}</p>
+      <p className="text-xs text-muted-foreground">{hint}</p>
     </div>
   );
 }
