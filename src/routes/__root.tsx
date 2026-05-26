@@ -72,8 +72,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Tiempo Canarias — Pronóstico 7 días por isla y municipio" },
+      { title: "Tiempo en Canarias — Pronóstico para que Yeya veaa el día" },
       { name: "description", content: "Pronóstico meteorológico de 7 días para todas las Islas Canarias, sus municipios y zonas. Con webcams en directo." },
+      { property: "og:title", content: "Tiempo en Canarias — Pronóstico para que Yeya veaa el día" },
+      { name: "twitter:title", content: "Tiempo en Canarias — Pronóstico para que Yeya veaa el día" },
+      { property: "og:description", content: "Pronóstico meteorológico de 7 días para todas las Islas Canarias, sus municipios y zonas. Con webcams en directo." },
+      { name: "twitter:description", content: "Pronóstico meteorológico de 7 días para todas las Islas Canarias, sus municipios y zonas. Con webcams en directo." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d394f5f7-1041-4b6b-90bf-e126102c3b70/id-preview-9a236bc4--64ec3210-907a-4b3a-8972-7eed9cb6fb8f.lovable.app-1779793668873.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d394f5f7-1041-4b6b-90bf-e126102c3b70/id-preview-9a236bc4--64ec3210-907a-4b3a-8972-7eed9cb6fb8f.lovable.app-1779793668873.png" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { property: "og:type", content: "website" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
