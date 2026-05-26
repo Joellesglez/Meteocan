@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getForecast, getMarine } from "@/lib/weather.functions";
 import { LOCATIONS, type Location } from "@/lib/locations";
-import { Search, MapPin, Wind, Droplets, Cloud, Sun, CloudRain, CloudSnow, CloudLightning, Video, ExternalLink, Waves, Thermometer, Compass, Timer, Moon } from "lucide-react";
+import { Search, MapPin, Wind, Droplets, Cloud, Sun, CloudRain, CloudSnow, CloudLightning, CloudFog, CloudDrizzle, Video, ExternalLink, Waves, Thermometer, Compass, Timer, Moon, Sunrise, Sunset, Gauge, Eye } from "lucide-react";
 import { TideChart } from "@/components/TideChart";
 
 export const Route = createFileRoute("/")({
@@ -13,14 +13,19 @@ export const Route = createFileRoute("/")({
 
 const ISLANDS = ["Todas", "Tenerife", "Gran Canaria", "Lanzarote", "Fuerteventura", "La Palma", "La Gomera", "El Hierro", "La Graciosa"];
 
-function pictoToIcon(code: number) {
-  if (!code) return { Icon: Sun, label: "Despejado" };
-  if (code <= 2) return { Icon: Sun, label: "Soleado" };
-  if (code <= 5) return { Icon: Cloud, label: "Parcialmente nuboso" };
-  if (code <= 8) return { Icon: Cloud, label: "Nuboso" };
-  if (code <= 14) return { Icon: CloudRain, label: "Lluvia" };
-  if (code <= 17) return { Icon: CloudLightning, label: "Tormenta" };
-  if (code <= 22) return { Icon: CloudSnow, label: "Nieve" };
+// Open-Meteo WMO weather codes -> icon + label (Spanish)
+function wmoToIcon(code: number | undefined, isDay = 1) {
+  const c = code ?? 0;
+  if (c === 0) return { Icon: isDay ? Sun : Moon, label: "Despejado" };
+  if (c <= 2) return { Icon: Sun, label: "Mayormente despejado" };
+  if (c === 3) return { Icon: Cloud, label: "Nuboso" };
+  if (c === 45 || c === 48) return { Icon: CloudFog, label: "Niebla" };
+  if (c >= 51 && c <= 57) return { Icon: CloudDrizzle, label: "Llovizna" };
+  if (c >= 61 && c <= 67) return { Icon: CloudRain, label: "Lluvia" };
+  if (c >= 71 && c <= 77) return { Icon: CloudSnow, label: "Nieve" };
+  if (c >= 80 && c <= 82) return { Icon: CloudRain, label: "Chubascos" };
+  if (c >= 85 && c <= 86) return { Icon: CloudSnow, label: "Chubascos de nieve" };
+  if (c >= 95) return { Icon: CloudLightning, label: "Tormenta" };
   return { Icon: Cloud, label: "Variable" };
 }
 
@@ -29,6 +34,19 @@ const DAYS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 function degToCardinal(deg: number) {
   const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO"];
   return dirs[Math.round(deg / 22.5) % 16];
+}
+
+function uvLabel(uv: number) {
+  if (uv < 3) return { text: "Bajo", color: "text-emerald-600" };
+  if (uv < 6) return { text: "Moderado", color: "text-yellow-600" };
+  if (uv < 8) return { text: "Alto", color: "text-orange-600" };
+  if (uv < 11) return { text: "Muy alto", color: "text-red-600" };
+  return { text: "Extremo", color: "text-fuchsia-700" };
+}
+
+function formatHM(iso: string) {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function Index() {
@@ -49,9 +67,9 @@ function Index() {
   const fetchMarine = useServerFn(getMarine);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["forecast", selected.lat, selected.lon],
+    queryKey: ["forecast-om", selected.lat, selected.lon],
     queryFn: () => fetchForecast({ data: { lat: selected.lat, lon: selected.lon } }),
-    staleTime: 1000 * 60 * 15,
+    staleTime: 1000 * 60 * 10,
   });
 
   const { data: marine } = useQuery({
@@ -61,8 +79,11 @@ function Index() {
     enabled: !!selected.coastal,
   });
 
-  const days = data?.data_day;
+  const current = data?.current;
+  const daily = data?.daily;
   const marineDays = marine?.available ? marine.daily : null;
+
+  const currentIcon = wmoToIcon(current?.weather_code, current?.is_day);
 
   return (
     <main className="min-h-screen">
@@ -77,7 +98,7 @@ function Index() {
             <span className="text-accent">ocho islas afortunadas</span>
           </h1>
           <p className="mt-4 max-w-xl text-lg opacity-90">
-            Pronóstico de 7 días, isla por isla, municipio por municipio. Mar, oleaje y webcams en directo.
+            Pronóstico en tiempo real, isla por isla, municipio por municipio. Mar, oleaje, UV y webcams.
           </p>
         </div>
       </header>
@@ -153,22 +174,39 @@ function Index() {
               <h2 className="mt-1 text-4xl font-bold">{selected.name}</h2>
               {isLoading && <p className="mt-8 opacity-70">Cargando pronóstico…</p>}
               {error && <p className="mt-8 text-destructive-foreground">No se pudo cargar el tiempo.</p>}
-              {days && (
-                <div className="mt-8 flex items-end gap-8 flex-wrap">
-                  <div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-7xl font-bold">{Math.round(days.temperature_max[0])}°</span>
-                      <span className="text-2xl opacity-70">/ {Math.round(days.temperature_min[0])}°</span>
+              {current && daily && (
+                <>
+                  <div className="mt-8 flex items-end gap-6 flex-wrap">
+                    <div>
+                      <div className="flex items-center gap-4">
+                        <currentIcon.Icon className="w-16 h-16 opacity-90" strokeWidth={1.5} />
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-7xl font-bold">{Math.round(current.temperature_2m)}°</span>
+                          <span className="text-xl opacity-70">
+                            {Math.round(daily.temperature_2m_max[0])}° / {Math.round(daily.temperature_2m_min[0])}°
+                          </span>
+                        </div>
+                      </div>
+                      <p className="mt-1 text-lg opacity-90">{currentIcon.label}</p>
+                      <p className="text-sm opacity-70">
+                        Sensación térmica {Math.round(current.apparent_temperature)}°
+                      </p>
                     </div>
-                    <p className="mt-1 text-lg opacity-90">{pictoToIcon(days.pictocode?.[0]).label}</p>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm opacity-90">
+                      <Stat icon={Wind} label="Viento" value={`${Math.round(current.wind_speed_10m)} km/h ${degToCardinal(current.wind_direction_10m)}`} />
+                      <Stat icon={Gauge} label="Rachas" value={`${Math.round(current.wind_gusts_10m)} km/h`} />
+                      <Stat icon={Droplets} label="Humedad" value={`${current.relative_humidity_2m}%`} />
+                      <Stat icon={Cloud} label="Nubes" value={`${current.cloud_cover}%`} />
+                      <Stat icon={Eye} label="Presión" value={`${Math.round(current.pressure_msl)} hPa`} />
+                      <Stat icon={Sun} label="UV máx." value={`${daily.uv_index_max[0]?.toFixed(0) ?? "-"} (${uvLabel(daily.uv_index_max[0] ?? 0).text})`} />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm opacity-90">
-                    <Stat icon={Wind} label="Viento" value={`${Math.round(days.windspeed_mean?.[0] ?? 0)} m/s`} />
-                    <Stat icon={Droplets} label="Lluvia" value={`${days.precipitation[0].toFixed(1)} mm`} />
-                    <Stat icon={Cloud} label="Nubes" value={`${Math.round(days.totalcloudcover_mean?.[0] ?? 0)}%`} />
-                    <Stat icon={Sun} label="Fiabilidad" value={`${days.predictability[0]}%`} />
+                  <div className="mt-6 flex flex-wrap gap-4 text-sm opacity-90 border-t border-white/15 pt-4">
+                    <span className="flex items-center gap-2"><Sunrise className="w-4 h-4" /> {formatHM(daily.sunrise[0])}</span>
+                    <span className="flex items-center gap-2"><Sunset className="w-4 h-4" /> {formatHM(daily.sunset[0])}</span>
+                    <span className="flex items-center gap-2"><Droplets className="w-4 h-4" /> Prob. lluvia hoy {daily.precipitation_probability_max[0] ?? 0}%</span>
                   </div>
-                </div>
+                </>
               )}
             </div>
           </div>
@@ -292,25 +330,35 @@ function Index() {
         )}
 
         <h3 className="mt-12 mb-4 text-2xl font-bold">Próximos 7 días</h3>
-        {days ? (
+        {daily ? (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-            {days.time.map((t: string, i: number) => {
+            {daily.time.map((t: string, i: number) => {
               const d = new Date(t);
-              const { Icon, label } = pictoToIcon(days.pictocode?.[i]);
+              const { Icon, label } = wmoToIcon(daily.weather_code[i]);
+              const isToday = i === 0;
               return (
-                <div key={t} className="rounded-2xl bg-card shadow-card p-4 text-center hover:-translate-y-1 transition-transform">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                    {i === 0 ? "Hoy" : DAYS[d.getDay()]}
+                <div
+                  key={t}
+                  className={`rounded-2xl p-4 text-center hover:-translate-y-1 transition-transform ${
+                    isToday
+                      ? "bg-primary/10 border-2 border-primary/30 shadow-card"
+                      : "bg-card shadow-card"
+                  }`}
+                >
+                  <p className={`text-xs uppercase tracking-wider ${isToday ? "text-primary font-bold" : "text-muted-foreground"}`}>
+                    {isToday ? "Hoy" : DAYS[d.getDay()]}
                   </p>
                   <p className="text-xs text-muted-foreground/70">{d.getDate()}/{d.getMonth() + 1}</p>
                   <Icon className="mx-auto my-3 w-10 h-10 text-primary" strokeWidth={1.5} />
-                  <p className="text-sm font-medium">{label}</p>
+                  <p className="text-sm font-medium truncate">{label}</p>
                   <div className="mt-2 flex items-center justify-center gap-2">
-                    <span className="text-lg font-bold">{Math.round(days.temperature_max[i])}°</span>
-                    <span className="text-sm text-muted-foreground">{Math.round(days.temperature_min[i])}°</span>
+                    <span className="text-lg font-bold">{Math.round(daily.temperature_2m_max[i])}°</span>
+                    <span className="text-sm text-muted-foreground">{Math.round(daily.temperature_2m_min[i])}°</span>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {days.precipitation[i] > 0 ? `${days.precipitation[i].toFixed(1)} mm` : "Sin lluvia"}
+                    {(daily.precipitation_probability_max[i] ?? 0) > 10
+                      ? `💧 ${daily.precipitation_probability_max[i]}%`
+                      : "Sin lluvia"}
                   </p>
                 </div>
               );
@@ -325,7 +373,7 @@ function Index() {
         )}
 
         <footer className="mt-16 text-center text-xs text-muted-foreground">
-          Datos meteorológicos por <a className="underline hover:text-primary" href="https://www.meteoblue.com" target="_blank" rel="noopener noreferrer">meteoblue</a> · Mar y oleaje por <a className="underline hover:text-primary" href="https://open-meteo.com" target="_blank" rel="noopener noreferrer">Open-Meteo Marine</a> · Webcams cortesía de sus proveedores.
+          Datos meteorológicos por <a className="underline hover:text-primary" href="https://open-meteo.com" target="_blank" rel="noopener noreferrer">Open-Meteo</a> (modelo ECMWF) · Mar y oleaje por <a className="underline hover:text-primary" href="https://open-meteo.com" target="_blank" rel="noopener noreferrer">Open-Meteo Marine</a> · Webcams cortesía de sus proveedores.
         </footer>
       </section>
     </main>
